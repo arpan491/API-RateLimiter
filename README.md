@@ -1,31 +1,24 @@
-# Distributed rate-limit library based on Redis
-[![golang-ci](https://github.com/vearne/ratelimit/actions/workflows/golang-ci.yml/badge.svg)](https://github.com/vearne/ratelimit/actions/workflows/golang-ci.yml)
-
----
+# Distributed Rate-Limiting Library Using Redis
 
 ### Overview
-The goal of this library is to be able to implement distributed rate limit functions simply and rudely. Similar to the usage of the ID generator, the client takes back the data from Redis - batch data (just a value here), as long as it Is not consumed.it doesn't exceed rate-limit.
+This library is designed to implement distributed rate limiting in a simple, no-nonsense way. Similar to how an ID generator works, the client retrieves data from Redis in batches (essentially just values). As long as these values aren't consumed, the rate limit is not exceeded.
 
-* [中文 README](https://github.com/vearne/ratelimit/blob/master/README_zh.md)
+### Key Advantages
+* Minimal dependencies—only Redis is required, no additional services
+* Utilizes Redis' internal clock, so clients don't need synchronized clocks
+* Thread- and coroutine-safe
+* Low overhead on the system and minimal pressure on Redis
 
-### Advantage
-* Less dependencies, only rely on Redis, no special services required
-* use Redis own clock, The clients no need to have the same clock
-* Thread (coroutine) security
-* Low system overhead and little pressure on redis
+### Important Notes
+Different limiter types use different Redis key data structures, so they cannot share the same Redis key name.
 
-## Notice
-Different types of limiters may have different redis-key data types in redis.
-So different types of limiters cannot use same name redis-key.
-
-For example
+Example:
 ```
 127.0.0.1:6379> type key:leaky
 string
 127.0.0.1:6379> type key:token
 hash
 127.0.0.1:6379> hgetall key:token
-
 "token_count"
 "0"
 "updateTime"
@@ -34,181 +27,165 @@ hash
 "1613807035353864"
 ```
 
-### How to get
+### Installation
 ```
-go get github.com/vearne/ratelimit
+go get github.com/arpan491/API-RateLimiter
 ```
+
 ### Usage
-#### 1. create redis.Client
-with "github.com/go-redis/redis"   
-Supports both redis master-slave mode and cluster mode
+
+#### 1. Create a Redis client
+Using the `"github.com/go-redis/redis"` package, the library supports both master-slave and cluster Redis modes.
 ```
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "xxx", // no password set
-		DB:       0,  // use default DB
-	})
+client := redis.NewClient(&redis.Options{
+    Addr:     "localhost:6379",
+    Password: "xxx", // no password
+    DB:       0,     // default DB
+})
 ```
+Or, for Redis cluster mode:
 ```
-	client := redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs:    []string{"127.0.0.1:6379"},
-		Password: "xxxx",
-	})
+client := redis.NewClusterClient(&redis.ClusterOptions{
+    Addrs:    []string{"127.0.0.1:6379"},
+    Password: "xxxx",
+})
 ```
 
-#### 2. create RateLimiter
-```
-limiter, err := ratelimit.NewTokenBucketRateLimiter(ctx, client,                
-        "push", time.Second, 200, 20, 5)
-```
-Indicates that 200 operations per second are allowed.
-```
-	limiter, err := ratelimit.NewTokenBucketRateLimiter(client, 
-	        ctx, "push", time.Minute, 200, 20, 5)
-```
-Indicates that 200 operations per minute are allowed.
+#### 2. Create a RateLimiter
 
+For a token bucket rate limiter that allows 200 operations per second:
+```
+limiter, err := ratelimit.NewTokenBucketRateLimiter(ctx, client, "push", time.Second, 200, 20, 5)
+```
+For 200 operations per minute:
+```
+limiter, err := ratelimit.NewTokenBucketRateLimiter(ctx, client, "push", time.Minute, 200, 20, 5)
+```
 
-#### 2.1 Counter algorithm
+#### 2.1 Counter Algorithm
 ```
 func NewCounterRateLimiter(ctx context.Context, client redis.Cmdable, key string, duration time.Duration,
-	throughput int,
-	batchSize int) (Limiter, error)
+    throughput int, batchSize int) (Limiter, error)
 ```
 
-|parameter|Description|
-|:---|:---|
-|key|Key in Redis|
-|duration|Indicates that the operation throughput is allowed in the duration time interval|
-|throughput|Indicates that the operation throughput is allowed in the duration time interval|
-|batchSize|The number of available operations each time retrieved from redis|
+| Parameter  | Description                                                                 |
+|------------|-----------------------------------------------------------------------------|
+| `key`      | Redis key name                                                              |
+| `duration` | Time interval for the allowed operation throughput                           |
+| `throughput` | Allowed number of operations within the given time interval                 |
+| `batchSize` | Number of operations retrieved from Redis in one batch                      |
 
-#### 2.2 Token bucket algorithm
+#### 2.2 Token Bucket Algorithm
 ```
 func NewTokenBucketRateLimiter(ctx context.Context, client redis.Cmdable, key string, duration time.Duration,
-	throughput int, maxCapacity int,
-	batchSize int) (Limiter, error)
+    throughput int, maxCapacity int, batchSize int) (Limiter, error)
 ```
 
-|parameter|Description|
-|:---|:---|
-|key|Key in Redis|
-|duration|Indicates that the operation throughput is allowed in the duration time interval|
-|throughput|Indicates that the operation throughput is allowed in the duration time interval|
-|maxCapacity|The maximum number of tokens that can be stored in the token bucket|
-|batchSize|The number of available operations each time retrieved from redis|
+| Parameter    | Description                                                                 |
+|--------------|-----------------------------------------------------------------------------|
+| `key`        | Redis key name                                                              |
+| `duration`   | Time interval for the allowed operation throughput                          |
+| `throughput` | Number of operations allowed within the given time interval                 |
+| `maxCapacity`| Maximum tokens that can be stored in the token bucket                        |
+| `batchSize`  | Number of operations retrieved from Redis in one batch                      |
 
-#### 2.3 Leaky bucket algorithm
+#### 2.3 Leaky Bucket Algorithm
 ```
 func NewLeakyBucketLimiter(ctx context.Context, client redis.Cmdable, key string, duration time.Duration,
-	throughput int) (Limiter, error) 
+    throughput int) (Limiter, error)
 ```
 
-|parameter|Description|
-|:---|:---|
-|key|Key in Redis|
-|duration|Indicates that the operation throughput is allowed in the duration time interval|
-|throughput|Indicates that the operation throughput is allowed in the duration time interval|
+| Parameter    | Description                                                                 |
+|--------------|-----------------------------------------------------------------------------|
+| `key`        | Redis key name                                                              |
+| `duration`   | Time interval for the allowed operation throughput                          |
+| `throughput` | Number of operations allowed within the given time interval                 |
 
-#### 2.4 sliding time window
+#### 2.4 Sliding Time Window
 ```
-NewSlideTimeWindowLimiter(throught int, duration time.Duration, windowBuckets int) (Limiter, error)
+NewSlideTimeWindowLimiter(throughput int, duration time.Duration, windowBuckets int) (Limiter, error)
 ```
 
-|parameter|Description|
-|:---|:---|
-|duration|Indicates that the operation throughput is allowed in the duration time interval|
-|throughput|Indicates that the operation throughput is allowed in the duration time interval|
-|windowBuckets|Indicates that windowBuckets buckets will be created for duration, and the time range represented by each bucket is duration/windowBuckets|
+| Parameter       | Description                                                                 |
+|-----------------|-----------------------------------------------------------------------------|
+| `duration`      | Time interval for the allowed operation throughput                          |
+| `throughput`    | Number of operations allowed within the given time interval                 |
+| `windowBuckets` | Number of buckets representing a segment of the time window (`duration/windowBuckets`) |
 
-Note: This limiter is based on memory and does not rely on Redis, so it may not be used in distributed frequency limiting scenarios.
+Note: The sliding window limiter operates in-memory and doesn't use Redis, making it unsuitable for distributed rate-limiting scenarios.
 
-### example
-[more example](https://github.com/vearne/ratelimit/tree/master/example)
+### Example
+[More examples](https://github.com/arpan491/API-RateLimiter/tree/main/example)
 
-```
+```go
 package main
 
 import (
-	"context"
-	"fmt"
-	"github.com/go-redis/redis/v8"
-	"github.com/vearne/ratelimit"
-	slog "github.com/vearne/simplelog"
-	"sync"
-	"time"
+    "context"
+    "fmt"
+    "github.com/go-redis/redis/v8"
+    "github.com/arpan491/API-RateLimiter"
+    slog "github.com/vearne/simplelog"
+    "sync"
+    "time"
 )
 
-func consume(r ratelimit.Limiter, group *sync.WaitGroup,
-	c *ratelimit.Counter, targetCount int) {
-	defer group.Done()
-	var ok bool
-	for {
-		ok = true
-		err := r.Wait(context.Background())
-		slog.Debug("r.Wait:%v", err)
-		if err != nil {
-			ok = false
-			slog.Error("error:%v", err)
-		}
-		if ok {
-			value := c.Incr()
-			slog.Debug("---value--:%v", value)
-			if value >= targetCount {
-				break
-			}
-		}
-	}
+func consume(r ratelimit.Limiter, group *sync.WaitGroup, c *ratelimit.Counter, targetCount int) {
+    defer group.Done()
+    var ok bool
+    for {
+        ok = true
+        err := r.Wait(context.Background())
+        slog.Debug("r.Wait:%v", err)
+        if err != nil {
+            ok = false
+            slog.Error("error:%v", err)
+        }
+        if ok {
+            value := c.Incr()
+            slog.Debug("---value--:%v", value)
+            if value >= targetCount {
+                break
+            }
+        }
+    }
 }
 
 func main() {
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "xxeQl*@nFE", // password set
-		DB:       0,            // use default DB
-	})
+    client := redis.NewClient(&redis.Options{
+        Addr:     "localhost:6379",
+        Password: "xxeQl*@nFE", // password
+        DB:       0,            // use default DB
+    })
 
-	limiter, err := ratelimit.NewTokenBucketRateLimiter(
-		context.Background(),
-		client,
-		"key:token",
-		time.Second,
-		10,
-		5,
-		2)
+    limiter, err := ratelimit.NewTokenBucketRateLimiter(
+        context.Background(),
+        client,
+        "key:token",
+        time.Second,
+        10,
+        5,
+        2,
+    )
 
-	if err != nil {
-		fmt.Println("error", err)
-		return
-	}
+    if err != nil {
+        fmt.Println("error", err)
+        return
+    }
 
-	var wg sync.WaitGroup
-	total := 50
-	counter := ratelimit.NewCounter()
-	start := time.Now()
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go consume(limiter, &wg, counter, total)
-	}
-	wg.Wait()
-	cost := time.Since(start)
-	fmt.Println("cost", time.Since(start), "rate", float64(total)/cost.Seconds())
+    var wg sync.WaitGroup
+    total := 50
+    counter := ratelimit.NewCounter()
+    start := time.Now()
+    for i := 0; i < 10; i++ {
+        wg.Add(1)
+        go consume(limiter, &wg, counter, total)
+    }
+    wg.Wait()
+    cost := time.Since(start)
+    fmt.Println("cost", cost, "rate", float64(total)/cost.Seconds())
 }
 ```
 
 ### Dependency
 [go-redis/redis](https://github.com/go-redis/redis)
-
-### Thanks
-The development of the module was inspired by the Reference 1.
-
-
-
-### Reference
-1. [Performance million/s: Tencent lightweight global flow control program](http://wetest.qq.com/lab/view/320.html)
-
-
-### Thanks
-[![jetbrains](img/jetbrains.svg)](https://www.jetbrains.com/community/opensource/#support)
-
-

@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/vearne/ratelimit"
 	"sync"
 	"time"
+
+	"github.com/arpan491/API-RateLimiter"
 )
 
 func consume(r ratelimit.Limiter, group *sync.WaitGroup,

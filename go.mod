@@ -1,4 +1,4 @@
-module github.com/vearne/ratelimit
+module github.com/arpan491/API-RateLimiter
 
 go 1.19
 

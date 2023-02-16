@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	"github.com/vearne/ratelimit"
-	slog "github.com/vearne/simplelog"
 	"sync"
 	"time"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/arpan491/API-RateLimiter"
+	slog "github.com/vearne/simplelog"
 )
 
 func consume(r ratelimit.Limiter, group *sync.WaitGroup,
